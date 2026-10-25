@@ -13,6 +13,8 @@ const {ensureSourceRuntime,NODE,COMMIT}=require('../runtime-source.cjs');
  const root=path.join(base,'runtime-v1');
  // Only installer-owned software is included. Never package extension storage or credentials.
  await fs.rm(path.join(r.harnessPath,'node_modules'),{force:true,recursive:true});
+ const license=await exec('git',['-C',r.sourcePath,'show','HEAD:LICENSE']);
+ await fs.writeFile(path.join(root,'STRATA-LICENSE'),license.stdout);
  await fs.rm(path.join(root,'strata/.git'),{recursive:true,force:true});
  await fs.rm(path.join(root,'harness/install-logs'),{recursive:true,force:true});
  await fs.rm(path.join(root,'ready.json'),{force:true});
