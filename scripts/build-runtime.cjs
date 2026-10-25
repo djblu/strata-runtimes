@@ -9,6 +9,7 @@ const {ensureSourceRuntime,NODE,COMMIT}=require('../runtime-source.cjs');
  const base=path.resolve(process.argv[2]||'.runtime/build');
  const out=path.resolve(process.argv[3]||'dist/runtime');
  const r=await ensureSourceRuntime(base,{},console.log,{reuseLegacy:false});
+ await require('./smoke-runtime.cjs').smoke(r);
  const root=path.join(base,'runtime-v1');
  // Only installer-owned software is included. Never package extension storage or credentials.
  await fs.rm(path.join(r.harnessPath,'node_modules'),{force:true,recursive:true});
