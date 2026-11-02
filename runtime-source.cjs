@@ -6,9 +6,12 @@ const {execFile}=require('node:child_process');
 const {createHash}=require('node:crypto');
 const exec=promisify(execFile);
 const {runtimeLayout,runtimeEnvironment}=require('./runtime-platform.cjs');
+const HARNESS='0.2.1-rc.5';
 const NODE='24.22.1',COMMIT='96ca4383c7b05a8a3e6064c65d9e9977d4b3bb59';
 async function exists(p){try{await fs.access(p);return true;}catch{return false;}}
 async function usable(c){return c.nodePath&&c.sourcePath&&c.harnessPath&&await exists(c.nodePath)&&await exists(path.join(c.sourcePath,'apps/host/server/agent/agent-bridge.mjs'))&&await exists(path.join(c.harnessPath,'lib/bin.js'));}
+async function pinnedHarness(result){try{return JSON.parse(await fs.readFile(path.join(result.harnessPath,'package.json'),'utf8')).version===HARNESS;}catch{return false;}}
+async function sourceReady(root,result){try{const m=JSON.parse(await fs.readFile(path.join(root,'ready.json'),'utf8'));return m.node===NODE&&m.strata===COMMIT&&m.harness===HARNESS&&await usable(result);}catch{return false;}}
 async function download(url){const r=await fetch(url,{signal:AbortSignal.timeout(180000)});if(!r.ok)throw Error('Runtime download failed: HTTP '+r.status);return Buffer.from(await r.arrayBuffer());}
 async function ensureSourceRuntime(base,overrides={},report=()=>{},{reuseLegacy=true}={}){
  if(await usable(overrides))return overrides;
@@ -17,7 +20,7 @@ async function ensureSourceRuntime(base,overrides={},report=()=>{},{reuseLegacy=
  const root=path.join(base,'runtime-v1');await fs.mkdir(root,{recursive:true});
  const layout=runtimeLayout(root,NODE);
  const result={nodePath:layout.nodePath,sourcePath:path.join(root,'strata'),harnessPath:path.join(root,'harness/node_modules/@deepseek-ai/dsh')};
- if(await exists(path.join(root,'ready.json'))&&await usable(result)){await applyCompatibility(result);return result;}
+ if(await sourceReady(root,result)){await applyCompatibility(result);return result;}
  try{await exec('git',['--version'],{timeout:10000,windowsHide:true});}catch{throw Error('Git is required for Strata setup. Install Git'+(layout.windows?' for Windows':'')+' and restart VS Code so Git is on PATH.');}
 
  if(!await exists(result.nodePath)){
@@ -34,7 +37,7 @@ async function ensureSourceRuntime(base,overrides={},report=()=>{},{reuseLegacy=
  await git(['init','-q']);await git(['sparse-checkout','set','apps/host/server']);
  await git(['fetch','--depth=1','https://github.com/Niko1221/Strata.git',COMMIT]);await git(['checkout','--detach','FETCH_HEAD']);
  report('Installing the pinned coding harness…');const harness=path.join(root,'harness');await fs.mkdir(harness,{recursive:true});
- await fs.writeFile(path.join(harness,'package.json'),JSON.stringify({private:true,dependencies:{'@deepseek-ai/dsh':'0.2.1-alpha.3'}}));
+ await fs.writeFile(path.join(harness,'package.json'),JSON.stringify({private:true,dependencies:{'@deepseek-ai/dsh':HARNESS}}));
  // Rebuild only this installer-owned dependency tree on retry. The bridge's
  // compatibility symlink must not be present while npm reconciles dependencies.
  await fs.rm(path.join(harness,'node_modules'),{recursive:true,force:true});
@@ -54,7 +57,7 @@ async function ensureSourceRuntime(base,overrides={},report=()=>{},{reuseLegacy=
  const nested=path.join(result.harnessPath,'node_modules');if(!await exists(nested))await fs.symlink(layout.windows?path.join(harness,'node_modules'):'../..',nested,layout.windows?'junction':'dir');
  if(!await usable(result))throw Error('Runtime installation is incomplete');
  await applyCompatibility(result);
- await fs.writeFile(path.join(root,'ready.json'),JSON.stringify({node:NODE,strata:COMMIT,harness:'0.2.1-alpha.3'}));return result;
+ await fs.writeFile(path.join(root,'ready.json'),JSON.stringify({node:NODE,strata:COMMIT,harness:HARNESS}));return result;
 }
 async function applyCompatibility(result){
  if(process.platform!=='win32')return;
@@ -62,4 +65,4 @@ async function applyCompatibility(result){
  const text=await fs.readFile(file,'utf8');
  if(text.includes('modelSelectionSettings: true'))await fs.writeFile(file,text.replaceAll('modelSelectionSettings: true','modelSelectionSettings: false'));
 }
-module.exports={ensureSourceRuntime,NODE,COMMIT};
+module.exports={ensureSourceRuntime,NODE,COMMIT,HARNESS};
